@@ -9,6 +9,8 @@ from app.database import Base, engine
 from app.models import Documents
 from app.database import get_db
 import fitz
+import pytesseract
+from PIL import Image
 
 
 Base.metadata.create_all(bind=engine)
@@ -57,7 +59,7 @@ def get_documents(session=Depends(get_db),limit: int = Query(default=10,ge=1,le=
         raise HTTPException(status_code=500, detail=str(e))
 @app.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...), destination: str = "server",session=Depends(get_db)):
-    allowed_extensions = ['.pdf', '.docx', '.txt']
+    allowed_extensions = ['.pdf', '.docx', '.txt','.png','.jpg','jpeg']
     extension = Path(file.filename).suffix
     if extension not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Invalid file type. Only PDF, DOCX, and TXT files are allowed.")
@@ -125,3 +127,20 @@ def extract_text(document_id: int, session=Depends(get_db)):
         return {"pages": pages, "status": "success", "document_id": document_id, "page_count": page_count, "character_count": character_count, "file_path": str(file_path)}
     except Exception as e:
             raise HTTPException(status_code=404, detail="No text found in the document")
+
+@app.post("/documents/{document_id}/ocr")
+def extract_Text_From_Image(document_id: int, session=Depends(get_db)):
+        try:
+            document = session.query(Documents).filter(Documents.id == document_id).first()
+            if not document:
+                raise HTTPException(status_code=404, detail="Document not found")
+            file_path = UPLOAD_DIR / document.stored_filename
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="File not found")
+            image = Image.open(file_path)
+            text = pytesseract.image_to_string(image)
+            return {"filename":"image","text":text}
+        except Exception as e:
+            raise HTTPException(status_code=404, detail="No text found in the document")
+
+
